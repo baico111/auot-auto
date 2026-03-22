@@ -1,0 +1,89 @@
+name: Host2Play Auto Renew Logic
+
+on:
+  schedule:
+    - cron: '30 22 * * *'
+  workflow_dispatch:
+
+jobs:
+  host2play-renewal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      # --- 关键修改：使用 MY_GITHUB_TOKEN 检出私库代码 ---
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: baico111/auto-haxrenw
+          token: ${{ secrets.MY_GITHUB_TOKEN }} 
+          path: .  # 保持代码在根目录，确保 PYTHONPATH 逻辑不变
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+          libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2t64 \
+          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 jq
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Requirements
+        run: |
+          pip install --upgrade pip
+          pip install seleniumbase requests loguru
+          pip install pyrogram tgcrypto
+
+      - name: Run Host2Play Task
+        id: host2play_run
+        continue-on-error: true
+        env:
+          # 以下变量需在公开仓库的 Secrets 中重新配置
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
+          HOSTUUID: ${{ secrets.HOSTUUID }}
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: python host2play.py  
+
+      # --- 保留原逻辑：推送产生的 SSI 和日志 ---
+      - name: Push Generated SSI and Logs
+        if: always()
+        run: |
+          git config --global user.name "SecurityBot"
+          git config --global user.email "bot@github.com"
+          git add play/
+          git commit -m "chore: sync host2play runtime data [skip ci]" || echo "No changes"
+          # 注意：这里的推送会推送到当前【公开仓库】，若需推回私库需额外配置远程地址
+          git push origin ${{ github.ref_name }} || echo "Push failed"
+
+      - name: Change IP and Restart Workflow
+        if: steps.host2play_run.outcome == 'failure' && github.run_attempt < 6
+        run: |
+          echo "检测到任务失败，准备换 IP 重试（当前第 ${{ github.run_attempt }} 次）"
+          
+          # 必须与顶部的 name 保持完全一致
+          WORKFLOW_NAME="Host2Play Auto Renew Logic"
+          
+          WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
+            | jq -r ".workflows[] | select(.name==\"$WORKFLOW_NAME\") | .id")
+
+          echo "目标工作流 ID: $WORKFLOW_ID"
+
+          curl -L -i -X POST \
+            -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches" \
+            -d '{"ref":"${{ github.ref_name }}"}'
+          
+          exit 1
