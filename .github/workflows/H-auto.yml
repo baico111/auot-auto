@@ -1,4 +1,4 @@
-name: Hax Auto Renew Logic (Free Mode)
+name: Hax Auto Renew Logic
 
 on:
   schedule:
@@ -12,16 +12,14 @@ jobs:
       contents: write
       
     steps:
-      - name: Checkout Public Repo
-        uses: actions/checkout@v4
-
-      # 关键步骤：拉取私有库代码
-      - name: Checkout Private Repo
+      # --- 关键：使用同一个变量拉取私库 ---
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           repository: baico111/auto-haxrenw
-          token: ${{ secrets.MY_PRIVATE_TOKEN }} # 存放你的 PAT
-          path: core_code # 将私有代码下载到这个文件夹
+          # 直接用你的核心变量名，确保有权限拉取私库
+          token: ${{ secrets.MY_GITHUB_TOKEN }} 
+          path: . 
 
       - name: Install System Dependencies
         run: |
@@ -44,7 +42,7 @@ jobs:
         id: hax_run
         continue-on-error: true
         env:
-          # 以下这些变量都需要在【公开仓库】的 Secrets 里配置
+          # 脚本内部逻辑调用的所有变量
           TG_STRING_SESSION: ${{ secrets.TG_STRING_SESSION }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
@@ -54,26 +52,28 @@ jobs:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
-          # 关键点：PYTHONPATH 指向私有代码存放的目录
-          PYTHONPATH: ${{ github.workspace }}/core_code
-        run: python core_code/hax_renw.py
+          PYTHONPATH: ${{ github.workspace }}
+          # 核心：确保 Python 脚本能拿到这个 Token
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          HOSTUUID: ${{ secrets.HOSTUUID }}
+        run: python hax_renw.py
 
       - name: Change IP and Restart Workflow
         if: steps.hax_run.outcome == 'failure' && github.run_attempt < 6
         run: |
           echo "检测到任务失败，准备换 IP 重试（当前第 ${{ github.run_attempt }} 次）"
           
-          # 注意：这里的名字必须和本文件的 name 一致
-          WORKFLOW_NAME="Hax Auto Renew Logic (Free Mode)"
+          WORKFLOW_NAME="Hax Auto Renew Logic"
           
-          WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_PRIVATE_TOKEN }}" \
+          # 重启逻辑继续使用同一个变量
+          WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
             | jq -r ".workflows[] | select(.name==\"$WORKFLOW_NAME\") | .id")
 
           echo "目标工作流 ID: $WORKFLOW_ID"
 
           curl -L -i -X POST \
-            -H "Authorization: token ${{ secrets.MY_PRIVATE_TOKEN }}" \
+            -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches" \
             -d '{"ref":"${{ github.ref_name }}"}'
