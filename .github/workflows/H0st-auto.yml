@@ -2,7 +2,8 @@ name: Host2Play Auto Renew Logic
 
 on:
   schedule:
-    - cron: '30 22 * * *'
+    - cron: '0 0,11,22 * * *'
+    - cron: '30 5,16 * * *'
   workflow_dispatch:
 
 jobs:
