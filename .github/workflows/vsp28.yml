@@ -1,0 +1,86 @@
+name: VSP28 Auto Renew Logic
+
+on:
+  schedule:
+    - cron: '20 18 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  hax-renewal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      # --- 关键：使用同一个变量拉取私库代码 ---
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: baico111/auto-haxrenw
+          # 必须在公开仓库 Settings 里存入 MY_GITHUB_TOKEN
+          token: ${{ secrets.MY_GITHUB_TOKEN }} 
+          path: .  # 保持代码铺在根目录，确保 PYTHONPATH 逻辑不变
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+          libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2t64 \
+          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 jq
+
+      - name: Install Chinese Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-wqy-zenhei # 安装文泉驿正黑体
+          sudo fc-cache -fv # 刷新字体缓存
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Requirements
+        run: |
+          pip install --upgrade pip
+          pip install seleniumbase pyrogram tgcrypto requests loguru
+
+      - name: Run VSP8 Task
+        id: hax_run
+        continue-on-error: true  # 必须开启，允许报错后执行下一步换IP逻辑
+        env:
+          # 注入你代码中 _US 结尾的所有变量（需在公开库 Secrets 配置）
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
+          PYTHONPATH: ${{ github.workspace }}
+          VPS8_EMAIL2: ${{ secrets.VPS8_EMAIL2 }}
+          VPS8_PASSWORD: ${{ secrets.VPS8_PASSWORD }}
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          # 如果脚本需要这个变量，也请加上
+        run: python vsp28.py
+
+      - name: Change IP and Restart Workflow
+        if: steps.hax_run.outcome == 'failure' && github.run_attempt < 6
+        run: |
+          echo "检测到任务失败，准备换 IP 重试（当前第 ${{ github.run_attempt }} 次）"
+          
+          # 必须与本文件顶部的 name 保持完全一致
+          WORKFLOW_NAME="VSP28 Auto Renew Logic"
+          
+          # 获取当前公开仓库中的工作流 ID
+          WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
+            | jq -r ".workflows[] | select(.name==\"$WORKFLOW_NAME\") | .id")
+
+          echo "目标工作流 ID: $WORKFLOW_ID"
+
+          # 重启公开仓库的工作流实现换 IP
+          curl -L -i -X POST \
+            -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches" \
+            -d '{"ref":"${{ github.ref_name }}"}'
+          
+          exit 1
