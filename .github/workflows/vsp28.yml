@@ -2,7 +2,7 @@ name: VSP28 Auto Renew Logic
 
 on:
   schedule:
-    - cron: '20 18 */3 * *'
+    - cron: '30 21 * * *'
   workflow_dispatch:
 
 jobs:
