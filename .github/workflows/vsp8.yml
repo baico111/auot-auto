@@ -43,8 +43,8 @@ jobs:
         continue-on-error: true  # 必须开启，允许报错后执行下一步换IP逻辑
         env:
           # 注入你代码中 _US 结尾的所有变量（需在公开库 Secrets 配置）
-          TELEGRAM_BOT_TOKEN_US: ${{ secrets.TELEGRAM_BOT_TOKEN_US }}
-          MY_CHAT_ID_US: ${{ secrets.MY_CHAT_ID_US }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
