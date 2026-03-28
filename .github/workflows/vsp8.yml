@@ -58,6 +58,7 @@ jobs:
           VPS8_EMAIL: ${{ secrets.VPS8_EMAIL }}
           VPS8_PASSWORD: ${{ secrets.VPS8_PASSWORD }}
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          BAICO_LICENSE_KEY: ${{ secrets.BAICO_LICENSE_KEY }}
           # 如果脚本需要这个变量，也请加上
         run: python vsp8-lock.py
 
