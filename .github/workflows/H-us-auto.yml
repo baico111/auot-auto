@@ -55,6 +55,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           # 脚本内部可能用到的 Token
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          BAICO_LICENSE_KEY: ${{ secrets.BAICO_LICENSE_KEY }}
           # 如果脚本需要这个变量，也请加上
           HOSTUUID: ${{ secrets.HOSTUUID }}
         run: python hax_renw_us.py
