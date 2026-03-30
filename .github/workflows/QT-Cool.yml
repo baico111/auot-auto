@@ -1,0 +1,45 @@
+name: QT_Cool_Checkin_Automation
+
+on:
+  workflow_dispatch: # 方便你手动点击测试
+  schedule:
+    - cron: '30 0 * * *' # 每天北京时间早上 8:30 自动运行
+
+jobs:
+  checkin-job:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          repository: baico111/auto-haxrenw
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          path: .
+
+      - name: 安装系统依赖 (针对 SeleniumBase)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+          libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2t64 \
+          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 \
+          fonts-wqy-zenhei
+
+      - name: 设置 Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖库
+        run: |
+          pip install seleniumbase requests
+
+      - name: 执行签到脚本
+        env:
+          # 请确保在仓库的 Settings -> Secrets and variables -> Actions 中配置以下变量
+          QTCOOL_SK: ${{ secrets.QTCOOL_SK }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+        run: |
+          # 使用 xvfb-run 启动，确保在无头模式下模拟真实显示器
+          xvfb-run --auto-servernum python qt-cool.py
