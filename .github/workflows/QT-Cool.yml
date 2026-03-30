@@ -40,6 +40,9 @@ jobs:
           QTCOOL_SK: ${{ secrets.QTCOOL_SK }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
         run: |
           # 使用 xvfb-run 启动，确保在无头模式下模拟真实显示器
           xvfb-run --auto-servernum python qt-cool.py
