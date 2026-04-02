@@ -2,8 +2,6 @@ name: QT_Cool_Checkin_Automation
 
 on:
   workflow_dispatch: # 方便你手动点击测试
-  schedule:
-    - cron: '30 0 * * *' # 每天北京时间早上 8:30 自动运行
 
 jobs:
   checkin-job:
