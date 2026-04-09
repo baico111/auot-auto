@@ -2,7 +2,7 @@ name: Hax-US Auto Renew Logic
 
 on:
   schedule:
-    - cron: '20 18 */3 * *'
+    - cron: '10 18 */3 * *'
   workflow_dispatch:
 
 jobs:
