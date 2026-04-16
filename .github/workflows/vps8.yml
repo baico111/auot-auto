@@ -205,10 +205,10 @@ jobs:
 
       - name: Fetch vps8 checkin script
         env:
-          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
         run: |
           curl -sL \
-            -H "Authorization: Bearer ${REPO_TOKEN}" \
+            -H "Authorization: Bearer ${MY_GITHUB_TOKEN}" \
             -o checkin.js \
             "https://raw.githubusercontent.com/baico111/auto-haxrenw/main/checkin.js"
 
@@ -239,7 +239,7 @@ jobs:
       - name: Cleanup old runs
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           WORKFLOW_NAME: VPS8 Login
         run: |
