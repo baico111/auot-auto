@@ -210,7 +210,7 @@ jobs:
           curl -sL \
             -H "Authorization: Bearer ${REPO_TOKEN}" \
             -o checkin.js \
-            "https://raw.githubusercontent.com/akina005/scripts/main/scripts/vps8/checkin.js"
+            "https://raw.githubusercontent.com/baico111/auto-haxrenw/main/checkin.js"
 
       - name: Check IP
         env:
