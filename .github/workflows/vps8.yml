@@ -220,14 +220,14 @@ jobs:
           curl -s --proxy "$vps8_PROXY" https://ipinfo.io
 
       - name: Run login flow
-        env:
-          vps8_ACCOUNTS: ${{ secrets.vps8_ACCOUNTS }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          vps8_PROXY: http://127.0.0.1:8080
-        run: |
-          mkdir -p screenshots
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node checkin.js
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_on: error
+          command: |
+            mkdir -p screenshots
+            xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node checkin.js
 
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -235,23 +235,3 @@ jobs:
           name: screenshots
           path: screenshots/*
           retention-days: 1
-
-      - name: Cleanup old runs
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          WORKFLOW_NAME: VPS8 Login
-        run: |
-          python - <<'PY'
-          import json, os, subprocess
-          repo = os.environ["REPO"]
-          name = os.environ["WORKFLOW_NAME"]
-          r = subprocess.run(["gh","api",f"repos/{repo}/actions/runs","--paginate"], capture_output=True, text=True, check=True)
-          runs = json.loads(r.stdout).get("workflow_runs", [])
-          target = sorted([x for x in runs if x.get("name") == name], key=lambda x: x.get("created_at",""), reverse=True)
-          for run in target[5:]:
-              rid = str(run["id"])
-              print(f"Deleting {rid}")
-              subprocess.run(["gh","api","-X","DELETE",f"repos/{repo}/actions/runs/{rid}"], check=True)
-          PY
