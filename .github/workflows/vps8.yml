@@ -2,7 +2,6 @@ name: VPS8 Login
 
 on:
   workflow_dispatch:
-
   push:
     paths:
       - "checkin.js"
@@ -220,19 +219,39 @@ jobs:
           curl -s --proxy "$vps8_PROXY" https://ipinfo.io
 
       - name: Run login flow
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          retry_on: error
-          command: |
-            mkdir -p screenshots
-            xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node checkin.js
+        id: login_step
+        continue-on-error: true # 开启后才能在失败时执行下一步的重启逻辑
+        run: |
+          mkdir -p screenshots
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node checkin.js
         env:
           vps8_ACCOUNTS: ${{ secrets.vps8_ACCOUNTS }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           vps8_PROXY: http://127.0.0.1:8080
+
+      - name: Restart Workflow on Failure
+        if: steps.login_step.outcome == 'failure' && github.run_attempt < 6
+        run: |
+          echo "检测到任务失败，准备重启整个工作流（当前尝试第 ${{ github.run_attempt }} 次）"
+          
+          # 这里的名称必须和本文件最顶部的 name 一致
+          WORKFLOW_NAME="VPS8 Login"
+          
+          # 核心重启逻辑
+          WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
+            | jq -r ".workflows[] | select(.name==\"$WORKFLOW_NAME\") | .id")
+
+          echo "目标工作流 ID: $WORKFLOW_ID"
+
+          curl -L -i -X POST \
+            -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches" \
+            -d '{"ref":"${{ github.ref_name }}"}'
+          
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: failure()
