@@ -1,11 +1,11 @@
-name: VPS8 Login
+name: VPS8-1 Login
 
 on:
   workflow_dispatch:
   push:
     paths:
       - "checkin.js"
-      - "vps8.yml"
+      - "vps8-1.yml"
 
 jobs:
   run:
@@ -236,7 +236,7 @@ jobs:
           echo "检测到任务失败，准备重启整个工作流（当前尝试第 ${{ github.run_attempt }} 次）"
           
           # 这里的名称必须和本文件最顶部的 name 一致
-          WORKFLOW_NAME="VPS8 Login"
+          WORKFLOW_NAME="VPS8-1 Login"
           
           # 核心重启逻辑
           WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
