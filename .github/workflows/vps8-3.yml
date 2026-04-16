@@ -5,7 +5,7 @@ on:
   push:
     paths:
       - "checkin.js"
-      - "vps8-1.yml"
+      - "vps8-3.yml"
 
 jobs:
   run:
