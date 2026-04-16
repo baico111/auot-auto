@@ -225,7 +225,7 @@ jobs:
           mkdir -p screenshots
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node checkin.js
         env:
-          vps8_ACCOUNTS: ${{ secrets.vps8_ACCOUNTS }}
+          vps8_ACCOUNTS: ${{ secrets.vps8_ACCOUNTS_3 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           vps8_PROXY: http://127.0.0.1:8080
