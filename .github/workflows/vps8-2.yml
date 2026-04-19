@@ -5,7 +5,10 @@ on:
   push:
     paths:
       - "checkin.js"
-      - "vps8-2.yml"
+      - "vps8-1.yml"
+  schedule:
+    # 每天北京时间 8:50 (UTC 0:50) 运行一次
+    - cron: '50 0 * * *'
 
 jobs:
   run:
