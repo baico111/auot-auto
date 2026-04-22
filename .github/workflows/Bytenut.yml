@@ -37,14 +37,14 @@ jobs:
         XRAY_VMESS_VLESS: ${{ secrets.PROXY }}
       if: env.XRAY_VMESS_VLESS != ''
       run: |
-        # 1. 下载并安装 Xray-core
         echo "📥 下载 Xray-core..."
         wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
         sudo apt-get install -y unzip
         unzip -o Xray-linux-64.zip xray
         chmod +x xray
 
-        # 2. 生成 Xray 配置文件 (完全保留你的 Reality 配置)
+        echo "📝 生成 Xray 配置文件..."
+        # ⚠️ 注意：下面的 EOF 标志必须严格顶格左对齐，不能有任何缩进
         cat <<EOF > xray_config.json
 {
   "inbounds": [{
@@ -82,10 +82,9 @@ jobs:
 }
 EOF
 
-        # 3. 后台启动 Xray
+        echo "🚀 启动 Xray..."
         nohup ./xray -c xray_config.json > xray.log 2>&1 &
         
-        # 4. 验证连通性
         sleep 5
         echo "✅ Xray 已启动，测试连通性..."
         curl -s -x http://127.0.0.1:8080 https://api.ipify.org || (cat xray.log && exit 1)
@@ -93,14 +92,15 @@ EOF
     # ================= 🚀 运行 Bytenut 脚本 =================
     - name: Run Script
       env:
-        # 这里的端口改成了上面设置的 8080
+        # 对接到 Xray 的 8080 端口
         PROXY: http://127.0.0.1:8080
         TG_TOKEN: ${{ secrets.TG_TOKEN }}      
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  
         ACCOUNTS: ${{ secrets.ACCOUNTS }}  
       run: |
-        # 检查 8080 端口是否启用，没启用就清空 PROXY 变量
+        # 检查 8080 端口是否启用，没启用就清空 PROXY 变量直接运行
         if ! nc -z 127.0.0.1 8080 2>/dev/null; then
+          echo "⚠️ 代理端口未就绪，尝试直接连接..."
           export PROXY=""
         fi
         xvfb-run -a python bytenut.py
