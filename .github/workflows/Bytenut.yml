@@ -11,6 +11,7 @@ permissions:
 jobs:
   run_renewal:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
     - name: Checkout code
@@ -30,59 +31,84 @@ jobs:
       run: |
         seleniumbase install chromedriver
 
+    # ================= 🛡️ 启动 Xray 代理转发 (完全克隆自 OptikLink) =================
     - name: Setup Proxy Tunnel (Xray)
       env:
-        XRAY_CONF: ${{ secrets.PROXY }} 
+        XRAY_VMESS_VLESS: ${{ secrets.PROXY }}
+      if: env.XRAY_VMESS_VLESS != ''
       run: |
-        if [ -n "${XRAY_CONF}" ]; then
-          echo "📥 下载 Xray..."
-          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          unzip -o Xray-linux-64.zip xray
-          chmod +x xray
+        # 1. 下载并安装 Xray-core
+        echo "📥 下载 Xray-core..."
+        wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+        sudo apt-get install -y unzip
+        unzip -o Xray-linux-64.zip xray
+        chmod +x xray
 
-          # 使用 Python 写入文件，避开 Shell 的 EOF 缩进坑
-          python3 -c '
-import json
-config = {
-    "inbounds": [{"port": 1080, "listen": "127.0.0.1", "protocol": "http", "settings": {"timeout": 360}}],
-    "outbounds": [{
-        "protocol": "vless",
-        "settings": {
-            "vnext": [{
-                "address": "38.97.62.210", "port": 50897,
-                "users": [{"id": "213a7536-6d24-4161-81a9-929a90f946a8", "encryption": "none", "flow": "xtls-rprx-vision"}]
-            }]
-        },
-        "streamSettings": {
-            "network": "tcp", "security": "reality",
-            "realitySettings": {
-                "show": false, "fingerprint": "firefox", "serverName": "www.iij.ad.jp",
-                "publicKey": "v9ngNcy7TywBomF4g1eGgDWiVBsXrrGEAVeQJpC9BDE", "shortId": "", "spiderX": ""
-            }
-        }
-    }]
+        # 2. 生成 Xray 配置文件 (完全保留你的 Reality 配置)
+        cat <<EOF > xray_config.json
+{
+  "inbounds": [{
+    "port": 8080,
+    "listen": "127.0.0.1",
+    "protocol": "http",
+    "settings": { "timeout": 360 }
+  }],
+  "outbounds": [{
+    "protocol": "vless",
+    "settings": {
+      "vnext": [{
+        "address": "38.97.62.210",
+        "port": 50897,
+        "users": [{
+          "id": "213a7536-6d24-4161-81a9-929a90f946a8",
+          "encryption": "none",
+          "flow": "xtls-rprx-vision"
+        }]
+      }]
+    },
+    "streamSettings": {
+      "network": "tcp",
+      "security": "reality",
+      "realitySettings": {
+        "show": false,
+        "fingerprint": "firefox",
+        "serverName": "www.iij.ad.jp",
+        "publicKey": "v9ngNcy7TywBomF4g1eGgDWiVBsXrrGEAVeQJpC9BDE",
+        "shortId": "",
+        "spiderX": ""
+      }
+    }
+  }]
 }
-with open("xray_config.json", "w") as f:
-    json.dump(config, f)
-'
-          nohup ./xray -c xray_config.json > xray.log 2>&1 &
-          sleep 5
-          echo "✅ Xray (Reality) 已启动"
-          curl -s -x http://127.0.0.1:1080 https://api.ipify.org || echo "⚠️ 代理连接失败"
-        else
-          echo "跳过代理设置"
-        fi
+EOF
 
+        # 3. 后台启动 Xray
+        nohup ./xray -c xray_config.json > xray.log 2>&1 &
+        
+        # 4. 验证连通性
+        sleep 5
+        echo "✅ Xray 已启动，测试连通性..."
+        curl -s -x http://127.0.0.1:8080 https://api.ipify.org || (cat xray.log && exit 1)
+
+    # ================= 🚀 运行 Bytenut 脚本 =================
     - name: Run Script
       env:
-        # 这里的协议改成了 http，因为 Xray inbound 设的是 http，更稳定
-        PROXY: http://127.0.0.1:1080
+        # 这里的端口改成了上面设置的 8080
+        PROXY: http://127.0.0.1:8080
         TG_TOKEN: ${{ secrets.TG_TOKEN }}      
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  
         ACCOUNTS: ${{ secrets.ACCOUNTS }}  
       run: |
-        # 检查 1080 端口是否启用，没启用就清空 PROXY 变量
-        if ! nc -z 127.0.0.1 1080 2>/dev/null; then
+        # 检查 8080 端口是否启用，没启用就清空 PROXY 变量
+        if ! nc -z 127.0.0.1 8080 2>/dev/null; then
           export PROXY=""
         fi
         xvfb-run -a python bytenut.py
+
+    - name: 📸 上传报告与截图
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bytenut-results
+        path: |
+          artifacts/
