@@ -91,7 +91,7 @@ jobs:
     - name: Run Script
       env:
         PROXY: http://127.0.0.1:8080
-        TG_TOKEN: ${{ secrets.TG_TOKEN }}      
+        TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}      
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  
         ACCOUNTS: ${{ secrets.ACCOUNTS }}  
       run: |
