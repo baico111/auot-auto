@@ -35,12 +35,19 @@ jobs:
       env:
         PROXY_URL: ${{ secrets.PROXY }} 
       run: |
-        wget -q https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
-        gunzip gost-linux-amd64-2.11.5.gz
-        chmod +x gost-linux-amd64-2.11.5
-        nohup ./gost-linux-amd64-2.11.5 -L :1080 -F "${PROXY_URL}" > gost.log 2>&1 &
-        sleep 5
-        curl -il -x socks5://127.0.0.1:1080 https://api.ipify.org
+        # 1. 只有当 PROXY_URL 不为空时才下载和启动 Gost
+        if [ -n "${PROXY_URL}" ]; then
+          echo "检测到代理配置，正在启动隧道..."
+          wget -q https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
+          gunzip gost-linux-amd64-2.11.5.gz
+          chmod +x gost-linux-amd64-2.11.5
+          # 启动 Gost 映射到 1080
+          nohup ./gost-linux-amd64-2.11.5 -L :1080 -F "${PROXY_URL}" > gost.log 2>&1 &
+          sleep 5
+          curl -il -x socks5://127.0.0.1:1080 https://api.ipify.org || echo "代理连接测试失败"
+        else
+          echo "未配置代理变量，跳过隧道设置，将直接连接网络。"
+        fi
 
     - name: Run Script
       env:
