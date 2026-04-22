@@ -2,7 +2,6 @@ name: Bytenut Auto Renew
 
 on:
   schedule:
-    # 每 2 小时运行一次（分钟选一个随机的，比如 15，避开高峰）
     - cron: '15 */2 * * *'
 
 permissions:
