@@ -45,7 +45,7 @@ jobs:
     - name: Run Script
       env:
         PROXY: socks5://127.0.0.1:1080
-        TG_TOKEN: ${{ secrets.TG_TOKEN }}      # 映射 Secret
+        TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}      # 映射 Secret
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  # 映射 Secret
         ACCOUNTS: ${{ secrets.ACCOUNTS }}  # 映射 Secret
       run: |
