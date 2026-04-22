@@ -30,57 +30,41 @@ jobs:
       run: |
         seleniumbase install chromedriver
 
-    # ================= 核心：换成 Xray 代理 =================
     - name: Setup Proxy Tunnel (Xray)
       env:
-        # 这里依然读取你的 Secret
         XRAY_CONF: ${{ secrets.PROXY }} 
       run: |
-        # 只有在配置了 Secret 的情况下才运行，防止报错
         if [ -n "${XRAY_CONF}" ]; then
           echo "📥 下载 Xray..."
           wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -o Xray-linux-64.zip xray
           chmod +x xray
 
-          # 生成配置文件 (监听 1080 端口，保持与你后面脚本一致)
-          cat <<EOF > xray_config.json
-          {
-            "inbounds": [{
-              "port": 1080,
-              "listen": "127.0.0.1",
-              "protocol": "http",
-              "settings": { "timeout": 360 }
-            }],
-            "outbounds": [{
-              "protocol": "vless",
-              "settings": {
-                "vnext": [{
-                  "address": "38.97.62.210",
-                  "port": 50897,
-                  "users": [{
-                    "id": "213a7536-6d24-4161-81a9-929a90f946a8",
-                    "encryption": "none",
-                    "flow": "xtls-rprx-vision"
-                  }]
-                }]
-              },
-              "streamSettings": {
-                "network": "tcp",
-                "security": "reality",
-                "realitySettings": {
-                  "show": false,
-                  "fingerprint": "firefox",
-                  "serverName": "www.iij.ad.jp",
-                  "publicKey": "v9ngNcy7TywBomF4g1eGgDWiVBsXrrGEAVeQJpC9BDE",
-                  "shortId": "",
-                  "spiderX": ""
-                }
-              }
+          # 使用 Python 写入文件，避开 Shell 的 EOF 缩进坑
+          python3 -c '
+import json
+config = {
+    "inbounds": [{"port": 1080, "listen": "127.0.0.1", "protocol": "http", "settings": {"timeout": 360}}],
+    "outbounds": [{
+        "protocol": "vless",
+        "settings": {
+            "vnext": [{
+                "address": "38.97.62.210", "port": 50897,
+                "users": [{"id": "213a7536-6d24-4161-81a9-929a90f946a8", "encryption": "none", "flow": "xtls-rprx-vision"}]
             }]
-          }
-          EOF
-
+        },
+        "streamSettings": {
+            "network": "tcp", "security": "reality",
+            "realitySettings": {
+                "show": false, "fingerprint": "firefox", "serverName": "www.iij.ad.jp",
+                "publicKey": "v9ngNcy7TywBomF4g1eGgDWiVBsXrrGEAVeQJpC9BDE", "shortId": "", "spiderX": ""
+            }
+        }
+    }]
+}
+with open("xray_config.json", "w") as f:
+    json.dump(config, f)
+'
           nohup ./xray -c xray_config.json > xray.log 2>&1 &
           sleep 5
           echo "✅ Xray (Reality) 已启动"
