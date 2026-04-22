@@ -31,7 +31,7 @@ jobs:
       run: |
         seleniumbase install chromedriver
 
-    # ================= 🛡️ 启动 Xray 代理转发 (完全克隆自 OptikLink) =================
+    # ================= 🛡️ 启动 Xray 代理转发 =================
     - name: Setup Proxy Tunnel (Xray)
       env:
         XRAY_VMESS_VLESS: ${{ secrets.PROXY }}
@@ -43,64 +43,60 @@ jobs:
         unzip -o Xray-linux-64.zip xray
         chmod +x xray
 
-        echo "📝 生成 Xray 配置文件..."
-        # ⚠️ 注意：下面的 EOF 标志必须严格顶格左对齐，不能有任何缩进
-        cat <<EOF > xray_config.json
-{
-  "inbounds": [{
-    "port": 8080,
-    "listen": "127.0.0.1",
-    "protocol": "http",
-    "settings": { "timeout": 360 }
-  }],
-  "outbounds": [{
-    "protocol": "vless",
-    "settings": {
-      "vnext": [{
-        "address": "38.97.62.210",
-        "port": 50897,
-        "users": [{
-          "id": "213a7536-6d24-4161-81a9-929a90f946a8",
-          "encryption": "none",
-          "flow": "xtls-rprx-vision"
-        }]
-      }]
-    },
-    "streamSettings": {
-      "network": "tcp",
-      "security": "reality",
-      "realitySettings": {
-        "show": false,
-        "fingerprint": "firefox",
-        "serverName": "www.iij.ad.jp",
-        "publicKey": "v9ngNcy7TywBomF4g1eGgDWiVBsXrrGEAVeQJpC9BDE",
-        "shortId": "",
-        "spiderX": ""
-      }
-    }
-  }]
-}
-EOF
+        echo "📝 正在生成 Xray 配置文件..."
+        # 这种写法是 YAML 官方推荐的，绝对不会报 EOF 错误
+        printf '{
+          "inbounds": [{
+            "port": 8080,
+            "listen": "127.0.0.1",
+            "protocol": "http",
+            "settings": { "timeout": 360 }
+          }],
+          "outbounds": [{
+            "protocol": "vless",
+            "settings": {
+              "vnext": [{
+                "address": "38.97.62.210",
+                "port": 50897,
+                "users": [{
+                  "id": "213a7536-6d24-4161-81a9-929a90f946a8",
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision"
+                }]
+              }]
+            },
+            "streamSettings": {
+              "network": "tcp",
+              "security": "reality",
+              "realitySettings": {
+                "show": false,
+                "fingerprint": "firefox",
+                "serverName": "www.iij.ad.jp",
+                "publicKey": "v9ngNcy7TywBomF4g1eGgDWiVBsXrrGEAVeQJpC9BDE",
+                "shortId": "",
+                "spiderX": ""
+              }
+            }
+          }]
+        }' > xray_config.json
 
         echo "🚀 启动 Xray..."
         nohup ./xray -c xray_config.json > xray.log 2>&1 &
         
         sleep 5
         echo "✅ Xray 已启动，测试连通性..."
-        curl -s -x http://127.0.0.1:8080 https://api.ipify.org || (cat xray.log && exit 1)
+        curl -s -I -x http://127.0.0.1:8080 https://www.google.com || (cat xray.log && exit 1)
 
     # ================= 🚀 运行 Bytenut 脚本 =================
     - name: Run Script
       env:
-        # 对接到 Xray 的 8080 端口
         PROXY: http://127.0.0.1:8080
         TG_TOKEN: ${{ secrets.TG_TOKEN }}      
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  
         ACCOUNTS: ${{ secrets.ACCOUNTS }}  
       run: |
-        # 检查 8080 端口是否启用，没启用就清空 PROXY 变量直接运行
         if ! nc -z 127.0.0.1 8080 2>/dev/null; then
-          echo "⚠️ 代理端口未就绪，尝试直接连接..."
+          echo "⚠️ 代理未开启，切换到直接连接"
           export PROXY=""
         fi
         xvfb-run -a python bytenut.py
