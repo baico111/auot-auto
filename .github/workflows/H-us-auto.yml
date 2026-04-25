@@ -8,8 +8,6 @@ on:
 jobs:
   hax-renewal:
     runs-on: ubuntu-latest
-    # --- 关键设置：整个 Job 运行超过 15 分钟则报错终止 ---
-    timeout-minutes: 15
     permissions:
       contents: write
       
@@ -42,6 +40,8 @@ jobs:
 
       - name: Run Hax Task
         id: hax_run
+        # 1. 在这里设置 15 分钟超时
+        timeout-minutes: 15
         continue-on-error: true  # 必须开启，允许报错后执行下一步换IP逻辑
         env:
           # 注入你代码中 _US 结尾的所有变量（需在公开库 Secrets 配置）
