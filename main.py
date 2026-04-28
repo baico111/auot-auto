@@ -104,33 +104,49 @@ def send_ui_report(data):
         print(f"❌ 发送环节发生异常: {e}")
 
 async def automate_web_process(url):
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(viewport={'width': 1280, 'height': 800})
-        page = await context.new_page()
-        try:
-            await page.goto(url, timeout=60000)
-            pw_selector = 'input.appearance-none.border-2.border-slate-200'
-            await page.wait_for_selector(pw_selector)
-            await page.fill(pw_selector, WEB_PASSWORD)
-            await page.click('button:has-text("安全登录")')
-            await page.wait_for_load_state("networkidle")
+    max_retries = 3  # 最大重试次数
+    for attempt in range(1, max_retries + 1):
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(viewport={'width': 1280, 'height': 800})
+            page = await context.new_page()
+            try:
+                print(f"正在尝试访问网页 (第 {attempt}/{max_retries} 次)...")
+                # 增加 goto 的超时到 60 秒，并使用 wait_until 确保网络相对空闲
+                await page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                
+                pw_selector = 'input.appearance-none.border-2.border-slate-200'
+                # 等待选择器时增加重试逻辑
+                await page.wait_for_selector(pw_selector, timeout=30000)
+                
+                await page.fill(pw_selector, WEB_PASSWORD)
+                await page.click('button:has-text("安全登录")')
+                await page.wait_for_load_state("networkidle")
 
-            await page.click('button:has-text("账号库存")')
-            await asyncio.sleep(5)
-            stock_count = await page.inner_text('span.text-indigo-600.text-base.font-black')
+                await page.click('button:has-text("账号库存")')
+                await asyncio.sleep(5)
+                stock_count = await page.inner_text('span.text-indigo-600.text-base.font-black')
 
-            await page.click('button:has-text("启动")')
-            await asyncio.sleep(30)
-            
-            screenshot_path = "result.png"
-            await page.screenshot(path=screenshot_path)
-            return {"stock": stock_count, "image": screenshot_path}
-        except Exception as e:
-            print(f"网页操作失败: {e}")
-            return None
-        finally:
-            await browser.close()
+                await page.click('button:has-text("启动")')
+                await asyncio.sleep(30)
+                
+                screenshot_path = "result.png"
+                await page.screenshot(path=screenshot_path)
+                
+                print("网页操作成功！")
+                return {"stock": stock_count, "image": screenshot_path}
+
+            except Exception as e:
+                print(f"第 {attempt} 次操作失败: {e}")
+                if attempt < max_retries:
+                    print("等待 5 秒后尝试刷新重试...")
+                    await asyncio.sleep(5)
+                    # 循环会继续，重新启动浏览器环境
+                else:
+                    print("已达到最大重试次数，放弃操作。")
+                    return None
+            finally:
+                await browser.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
