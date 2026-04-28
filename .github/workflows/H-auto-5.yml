@@ -44,12 +44,12 @@ jobs:
         continue-on-error: true  # 必须开启，允许报错后执行下一步换IP逻辑
         env:
           # 注入你代码中 _US 结尾的所有变量（需在公开库 Secrets 配置）
-          TG_STRING_SESSION_4: ${{ secrets.TG_STRING_SESSION_4 }}
-          TELEGRAM_BOT_TOKEN_4: ${{ secrets.TELEGRAM_BOT_TOKEN_4 }}
-          MY_CHAT_ID_4: ${{ secrets.MY_CHAT_ID_4 }}
-          TELEGRAM_PHONE_4: ${{ secrets.TELEGRAM_PHONE_4 }}
-          TELEGRAM_API_ID_4: ${{ secrets.TELEGRAM_API_ID_4 }}
-          TELEGRAM_API_HASH_4: ${{ secrets.TELEGRAM_API_HASH_4 }}
+          TG_STRING_SESSION_4: ${{ secrets.TG_STRING_SESSION_5 }}
+          TELEGRAM_BOT_TOKEN_4: ${{ secrets.TELEGRAM_BOT_TOKEN_5 }}
+          MY_CHAT_ID_4: ${{ secrets.MY_CHAT_ID_5 }}
+          TELEGRAM_PHONE_4: ${{ secrets.TELEGRAM_PHONE_5 }}
+          TELEGRAM_API_ID_4: ${{ secrets.TELEGRAM_API_ID_5 }}
+          TELEGRAM_API_HASH_4: ${{ secrets.TELEGRAM_API_HASH_5 }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME }}
