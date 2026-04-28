@@ -20,7 +20,7 @@ jobs:
 
       - name: 3. 安装项目依赖
         run: |
-          pip install pyrogram tgcrypto playwright
+          pip install pyrogram tgcrypto playwright requests
           playwright install --with-deps chromium
 
       - name: 执行自动化脚本
