@@ -1,0 +1,36 @@
+name: Zo-2-19-Auto-Renew-Workflow
+
+on:
+  workflow_dispatch: 
+  schedule:
+    - cron: '0 */6 * * *'
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 拉取代码
+        uses: actions/checkout@v3
+
+      - name: 2. 安装 Python 环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 3. 安装项目依赖
+        run: |
+          pip install pyrogram tgcrypto playwright requests
+          playwright install --with-deps chromium
+          
+      - name: 执行自动化脚本
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID_3 }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH_3 }}
+          TG_STRING_SESSION: ${{ secrets.TG_STRING_SESSION_3 }}
+          WENPASSWORD: ${{ secrets.WENPASSWORD }}
+          TELEGRAM_ACCOUNT_ID: ${{ secrets.TELEGRAM_ACCOUNT_ID_3 }}
+          # 新增这两个
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_3 }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID_3 }}
+        run: python main.py
