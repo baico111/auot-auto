@@ -32,5 +32,5 @@ jobs:
           TELEGRAM_ACCOUNT_ID: ${{ secrets.TELEGRAM_ACCOUNT_ID }}
           # 新增这两个
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_API_ID_4: ${{ secrets.TELEGRAM_API_ID }}
+          MY_CHAT_ID: ${{ secrets.MY_CHAT_ID }}
         run: python main.py
