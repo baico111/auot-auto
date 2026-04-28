@@ -15,7 +15,7 @@ ACCOUNT_NAME = os.environ.get("TELEGRAM_ACCOUNT_ID", "未设置账户")
 
 # 通知配置 (发图逻辑的关键变量)
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-MY_CHAT_ID = os.environ.get("TELEGRAM_API_ID_") # 接收通知的 ID
+MY_CHAT_ID = os.environ.get("MY_CHAT_ID") # 接收通知的 ID
 
 TARGET_BOT = "zo_computer_bot"
 
