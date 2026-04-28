@@ -14,7 +14,7 @@ ACCOUNT_NAME = os.environ.get("TELEGRAM_ACCOUNT_ID", "未设置账户")
 
 # 通知配置
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-MY_CHAT_ID = int(os.environ.get("TELEGRAM_API_ID_4", 0)) 
+MY_CHAT_ID = int(os.environ.get("TELEGRAM_API_ID", 0)) 
 
 TARGET_BOT = "zo_computer_bot" # Pyrogram 不需要加 @
 
@@ -81,14 +81,17 @@ async def main():
 🕒 北京时间：{bj_time}
 ————————————————————"""
             
-            # 1. 给对方机器人发报告
-            await app.send_photo(TARGET_BOT, report_data['image'], caption=report_text)
-            
-            # 2. 给自己的机器人发通知
-            await bot_app.send_photo(MY_CHAT_ID, report_data['image'], caption=report_text)
-            print("报告已双向发送完成")
-    else:
-        print("超时未收到域名回复")
+            # --- 核心修改：只发给你设置的机器人 ---
+            # 使用 bot_app 发送，目标是你的个人 ID (MY_CHAT_ID)
+            try:
+                await bot_app.send_photo(
+                    chat_id=MY_CHAT_ID, 
+                    photo=report_data['image'], 
+                    caption=report_text
+                )
+                print(f"✅ 结果已成功推送至你的 Bot (ID: {MY_CHAT_ID})")
+            except Exception as e:
+                print(f"❌ Bot 发送失败: {e}")
 
     await app.stop()
     await bot_app.stop()
