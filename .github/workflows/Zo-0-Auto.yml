@@ -20,8 +20,7 @@ jobs:
 
       - name: 3. 安装项目依赖
         run: |
-          pip install telethon playwright
-          # 安装 Playwright 浏览器内核及其系统依赖（这一步在 GitHub 环境必须有）
+          pip install pyrogram tgcrypto playwright
           playwright install --with-deps chromium
 
       - name: 执行自动化脚本
