@@ -15,7 +15,7 @@ ACCOUNT_NAME = os.environ.get("TELEGRAM_ACCOUNT_ID", "未设置账户")
 
 # 通知配置 (发图逻辑的关键变量)
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-MY_CHAT_ID = os.environ.get("MY_CHAT_ID") # 接收通知 detour
+MY_CHAT_ID = os.environ.get("MY_CHAT_ID") # 接收通知的 ID
 
 TARGET_BOT = "zo_computer_bot"
 
@@ -42,76 +42,87 @@ async def main():
     await app.start()
 
     # ================= 增加的功能：前置状态检查与旧域名尝试 =================
-    print("【日志】开始前置状态检查：读取 zo_computer_bot 最后一条消息...")
+    print("[DEBUG_LOG] >>> 启动流程：开始前置状态检查...", flush=True)
     should_continue_original_flow = True
     
-    # 确保能拿到消息并进入检测逻辑
-    messages = []
-    async for msg in app.get_chat_history(TARGET_BOT, limit=1):
-        messages.append(msg)
+    print(f"[DEBUG_LOG] 正在尝试读取 @{TARGET_BOT} 的最后一条历史消息...", flush=True)
     
-    if messages:
-        last_message = messages[0]
+    # 获取最后一条消息
+    last_message = None
+    async for msg in app.get_chat_history(TARGET_BOT, limit=1):
+        last_message = msg
+        break
+
+    if last_message:
+        print(f"[DEBUG_LOG] 成功获取到最后一条消息，内容预览: {(last_message.text or '')[:50]}...", flush=True)
         found_last_urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', last_message.text or "")
+        
         if found_last_urls:
             last_url = found_last_urls[0]
-            print(f"【日志】检测到历史域名: {last_url}，开始尝试访问并验证状态...")
+            print(f"[DEBUG_LOG] 提取到旧域名: {last_url}，准备进行登录验证...", flush=True)
             
-            # 针对旧域名的刷新/访问重试逻辑
+            # 针对旧域名的重试逻辑
             for retry_count in range(3):
-                print(f"【日志】尝试访问历史域名 - 第 {retry_count + 1} 次...")
+                print(f"[DEBUG_LOG] 尝试访问旧域名 [轮次 {retry_count + 1}/3]...", flush=True)
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True)
                     context = await browser.new_context(viewport={'width': 1280, 'height': 800})
                     page = await context.new_page()
                     try:
+                        print(f"[DEBUG_LOG] 正在打开页面: {last_url}", flush=True)
                         await page.goto(last_url, timeout=30000, wait_until="domcontentloaded")
+                        
                         pw_selector = 'input.appearance-none.border-2.border-slate-200'
-                        await page.wait_for_selector(pw_selector, timeout=10000)
+                        print("[DEBUG_LOG] 等待密码输入框出现...", flush=True)
+                        await page.wait_for_selector(pw_selector, timeout=15000)
+                        
                         await page.fill(pw_selector, WEB_PASSWORD)
                         await page.click('button:has-text("安全登录")')
                         await page.wait_for_load_state("networkidle")
-                        
-                        print("【日志】登录成功，正在检查界面按钮状态...")
+                        print("[DEBUG_LOG] 登录操作完成，检查页面元素...", flush=True)
                         
                         # 检查按钮状态
                         stop_btn = await page.query_selector('span:has-text("停止")')
                         start_btn = await page.query_selector('span:has-text("启动")')
                         
                         if stop_btn:
-                            print("【日志】界面显示『停止』，程序已经在运行中，直接结束任务。")
+                            print("[DEBUG_LOG] 关键发现：界面显示『停止』按钮！程序已经在运行。直接结束脚本。", flush=True)
                             should_continue_original_flow = False
                         elif start_btn:
-                            print("【日志】界面显示『启动』，正在点击启动按钮...")
+                            print("[DEBUG_LOG] 关键发现：界面显示『启动』按钮！正在执行唤醒操作...", flush=True)
                             await page.click('button:has-text("启动")')
-                            await asyncio.sleep(10)
-                            print("【日志】已触发启动，任务结束。")
+                            await asyncio.sleep(10) 
+                            print("[DEBUG_LOG] 启动指令已点击，任务完成。", flush=True)
                             should_continue_original_flow = False
-                        break 
+                        
+                        break # 如果能走到这一步，说明域名是活的，处理完逻辑就跳出重试循环
 
                     except Exception as e:
-                        print(f"【日志】访问历史域名失败: {e}")
+                        print(f"[DEBUG_LOG] 访问旧域名出错: {str(e)}", flush=True)
                         if retry_count < 2:
-                            print("【日志】等待 5 秒后刷新重试...")
+                            print("[DEBUG_LOG] 5秒后进行下一次刷新重试...", flush=True)
                             await asyncio.sleep(5)
+                        else:
+                            print("[DEBUG_LOG] 达到最大重试次数，判定旧域名失效。", flush=True)
                     finally:
                         await browser.close()
                 
                 if not should_continue_original_flow:
                     break
         else:
-            print("【日志】历史消息中未发现有效域名。")
+            print("[DEBUG_LOG] 历史消息中没有包含 Cloudflare 域名，准备走新流程。", flush=True)
     else:
-        print("【日志】未获取到历史聊天记录。")
+        print("[DEBUG_LOG] 未能在 Bot 历史记录中找到任何消息。", flush=True)
 
     if not should_continue_original_flow:
+        print("[DEBUG_LOG] 检测逻辑已处理完毕，无需发送新指令。正在退出...", flush=True)
         await app.stop()
         return
     
-    print("【日志】状态检查完毕：需执行原定 Bot 交互流程。")
+    print("[DEBUG_LOG] >>> 前置检查结束：开始执行原定 Bot 交互流程...", flush=True)
     # =====================================================================
 
-    print("已连接 Telegram，发送指令中...")
+    print("已连接 Telegram，发送指令中...", flush=True)
     await app.send_message(TARGET_BOT, COMMAND_TEXT)
     
     target_url = None
@@ -123,7 +134,7 @@ async def main():
             found_urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', message.text or "")
             if found_urls:
                 target_url = found_urls[0]
-                print(f"提取到域名: {target_url}")
+                print(f"提取到域名: {target_url}", flush=True)
                 break
         if not target_url:
             await asyncio.sleep(10)
@@ -165,13 +176,13 @@ def send_ui_report(data):
                 }, files={'photo': photo}, timeout=15)
                 
                 if r.status_code == 200:
-                    print(f"✅ 结果已通过 Bot API 成功推送至 ID: {MY_CHAT_ID}")
+                    print(f"✅ 结果已通过 Bot API 成功推送至 ID: {MY_CHAT_ID}", flush=True)
                 else:
-                    print(f"❌ Bot 发送失败，响应码: {r.status_code}, 内容: {r.text}")
+                    print(f"❌ Bot 发送失败，响应码: {r.status_code}, 内容: {r.text}", flush=True)
         else:
-            print(f"❌ 找不到截图文件: {photo_path}")
+            print(f"❌ 找不到截图文件: {photo_path}", flush=True)
     except Exception as e:
-        print(f"❌ 发送环节发生异常: {e}")
+        print(f"❌ 发送环节发生异常: {e}", flush=True)
 
 async def automate_web_process(url):
     max_retries = 3  # 最大重试次数
@@ -181,7 +192,7 @@ async def automate_web_process(url):
             context = await browser.new_context(viewport={'width': 1280, 'height': 800})
             page = await context.new_page()
             try:
-                print(f"正在尝试访问网页 (第 {attempt}/{max_retries} 次)...")
+                print(f"正在尝试访问网页 (第 {attempt}/{max_retries} 次)...", flush=True)
                 # 增加 goto 的超时到 60 秒，并使用 wait_until 确保网络相对空闲
                 await page.goto(url, timeout=60000, wait_until="domcontentloaded")
                 
@@ -203,17 +214,16 @@ async def automate_web_process(url):
                 screenshot_path = "result.png"
                 await page.screenshot(path=screenshot_path)
                 
-                print("网页操作成功！")
+                print("网页操作成功！", flush=True)
                 return {"stock": stock_count, "image": screenshot_path}
 
             except Exception as e:
-                print(f"第 {attempt} 次操作失败: {e}")
+                print(f"第 {attempt} 次操作失败: {e}", flush=True)
                 if attempt < max_retries:
-                    print("等待 5 秒后尝试刷新重试...")
+                    print("等待 5 秒后尝试刷新重试...", flush=True)
                     await asyncio.sleep(5)
-                    # 循环会继续，重新启动浏览器环境
                 else:
-                    print("已达到最大重试次数，放弃操作。")
+                    print("已达到最大重试次数，放弃操作。", flush=True)
                     return None
             finally:
                 await browser.close()
