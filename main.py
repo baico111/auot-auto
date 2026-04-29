@@ -41,6 +41,65 @@ async def main():
 
     await app.start()
 
+    # ================= 增加的功能：前置状态检查与旧域名尝试 =================
+    print("正在检查历史域名状态...")
+    should_continue_original_flow = True
+    
+    async for last_message in app.get_chat_history(TARGET_BOT, limit=1):
+        found_last_urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', last_message.text or "")
+        if found_last_urls:
+            last_url = found_last_urls[0]
+            print(f"检测到历史域名: {last_url}，尝试访问...")
+            
+            # 针对旧域名的刷新/访问重试逻辑
+            access_success = False
+            for retry_count in range(3):
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    context = await browser.new_context(viewport={'width': 1280, 'height': 800})
+                    page = await context.new_page()
+                    try:
+                        await page.goto(last_url, timeout=30000, wait_until="domcontentloaded")
+                        pw_selector = 'input.appearance-none.border-2.border-slate-200'
+                        await page.wait_for_selector(pw_selector, timeout=10000)
+                        await page.fill(pw_selector, WEB_PASSWORD)
+                        await page.click('button:has-text("安全登录")')
+                        await page.wait_for_load_state("networkidle")
+                        
+                        access_success = True # 成功登录进去了
+                        
+                        # 检查按钮状态
+                        stop_btn = await page.query_selector('span:has-text("停止")')
+                        start_btn = await page.query_selector('span:has-text("启动")')
+                        
+                        if stop_btn:
+                            print("界面显示『停止』，程序已在运行中，任务结束。")
+                            should_continue_original_flow = False
+                        elif start_btn:
+                            print("界面显示『启动』，正在执行点击启动...")
+                            await page.click('button:has-text("启动")')
+                            await asyncio.sleep(10) # 等待启动反馈
+                            print("已执行启动操作，任务结束。")
+                            should_continue_original_flow = False
+                        break # 既然登录成功并处理了，跳出重试循环
+
+                    except Exception as e:
+                        print(f"第 {retry_count + 1} 次尝试访问旧域名失败: {e}")
+                        if retry_count < 2:
+                            await asyncio.sleep(5) # 刷新前的等待
+                    finally:
+                        await browser.close()
+                
+                if not should_continue_original_flow:
+                    break
+
+    if not should_continue_original_flow:
+        await app.stop()
+        return
+    
+    print("旧域名无效或无法处理，开始执行原定 Bot 交互流程...")
+    # =====================================================================
+
     print("已连接 Telegram，发送指令中...")
     await app.send_message(TARGET_BOT, COMMAND_TEXT)
     
