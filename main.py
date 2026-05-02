@@ -21,6 +21,8 @@ TARGET_BOT = "zo_computer_bot"
 
 COMMAND_TEXT = """你先帮我重启我的哪吒探针agent.sh，确保哪吒探针agent.sh在运行后再帮我依次运行下面的代码，并发给我日志中显示的最新的域名。
 
+pkill -f cloudflared
+
 nohup /usr/local/bin/cloudflared tunnel --url http://127.0.0.1:8000 >> /opt/openai-cpa/cf.log 2>&1 &
 
 cd /opt/openai-cpa && source venv/bin/activate
