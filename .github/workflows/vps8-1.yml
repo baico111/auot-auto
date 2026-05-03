@@ -160,7 +160,12 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb google-chrome-stable
+          # 添加了 fonts-wqy-microhei (文泉驿微米黑中文字体)
+          sudo apt-get install -y -qq xvfb google-chrome-stable fonts-wqy-microhei
+          
+          # 刷新字体缓存，确保 Chrome 能识别新字体
+          sudo fc-cache -fv
+          
           pip install seleniumbase requests pyvirtualdisplay
           # 关键：安装浏览器驱动
           sbase install chromedriver
