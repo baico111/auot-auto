@@ -183,22 +183,23 @@ jobs:
           curl -s --proxy "$vps8_PROXY" https://api.ipify.org && echo
           curl -s --proxy "$vps8_PROXY" https://ipinfo.io
 
-      # 8. 运行登录流程 (由 Node 改为 Python)
       - name: Run login flow
         id: login_step
         continue-on-error: true
-        run: |
-          mkdir -p screenshots
-          # 使用 xvfb-run 配合 Python 运行
-          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" python checkin.py
         env:
           vps8_ACCOUNTS: ${{ secrets.vps8_ACCOUNTS }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          # 代理地址
           HTTP_PROXY: http://127.0.0.1:8080
           HTTPS_PROXY: http://127.0.0.1:8080
-
+          # 关键：增加 no_proxy 排除本地回环地址
+          no_proxy: localhost,127.0.0.1
+        run: |
+          mkdir -p screenshots
+          # 稍微给 Xvfb 更多一点启动余量
+          sleep 5
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" python checkin.py
+          
       # 9. 失败自动重启 (保持原样)
       - name: Restart Workflow on Failure
         if: steps.login_step.outcome == 'failure' && github.run_attempt < 6
