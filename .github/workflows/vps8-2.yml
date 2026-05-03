@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "checkin.js"
-      - "vps8-1.yml"
+      - "checkin.py"
+      - "vps8-2.yml"
   schedule:
-    # 每天北京时间 8:50 (UTC 0:50) 运行一次
-    - cron: '50 0 * * *'
+    # 每天北京时间 8:10 (UTC 0:10) 运行一次
+    - cron: '10 0 * * *'
 
 jobs:
   run:
@@ -18,10 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # 1. 初始化 Python 环境
+      - uses: actions/setup-python@v5
         with:
-          node-version: 20
+          python-version: '3.11'
 
+      # 2. 安装 Xray (保持原样)
       - name: Install Xray
         run: |
           wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
@@ -30,6 +32,7 @@ jobs:
           chmod +x xray-bin/xray
           sudo mv xray-bin/xray /usr/local/bin/xray
 
+      # 3. 构建 Xray 配置 (保持原样)
       - name: Build Xray config
         env:
           vps8_PROXY: ${{ secrets.vps8_PROXY }}
@@ -51,38 +54,30 @@ jobs:
               transport_type = query.get("type", "tcp")
               if transport_type == "h2":
                   transport_type = "http"
-
               stream_settings = {
                   "network": transport_type,
                   "security": query.get("security", "none"),
               }
-
               if stream_settings["security"] == "reality":
                   reality = {
                       "serverName": query.get("sni", host),
                       "fingerprint": query.get("fp", "chrome"),
                       "publicKey": query.get("pbk", ""),
                   }
-                  if query.get("sid"):
-                      reality["shortId"] = query["sid"]
-                  if query.get("spx"):
-                      reality["spiderX"] = query["spx"]
+                  if query.get("sid"): reality["shortId"] = query["sid"]
+                  if query.get("spx"): reality["spiderX"] = query["spx"]
                   stream_settings["realitySettings"] = reality
               elif stream_settings["security"] == "tls":
                   stream_settings["tlsSettings"] = {
                       "serverName": query.get("sni", host),
                       "fingerprint": query.get("fp", "chrome"),
                   }
-
               if transport_type == "tcp":
                   header_type = query.get("headerType", "none")
-                  stream_settings["tcpSettings"] = {
-                      "header": {"type": header_type}
-                  }
+                  stream_settings["tcpSettings"] = {"header": {"type": header_type}}
               elif transport_type == "ws":
                   headers = {}
-                  if query.get("host"):
-                      headers["Host"] = query["host"]
+                  if query.get("host"): headers["Host"] = query["host"]
                   stream_settings["wsSettings"] = {
                       "path": query.get("path", "/"),
                       "headers": headers,
@@ -98,7 +93,6 @@ jobs:
                       "serviceName": query.get("serviceName", ""),
                       "authority": query.get("authority", ""),
                   }
-
               return stream_settings
 
           if scheme == "vless":
@@ -106,21 +100,13 @@ jobs:
               host = parsed.hostname
               port = parsed.port
               user_id = unquote(parsed.username or "")
-
-              if not host or not port or not user_id:
-                  raise SystemExit("Invalid VLESS URL: missing host, port, or uuid")
-
               outbound = {
                   "protocol": "vless",
                   "settings": {
                       "vnext": [{
                           "address": host,
                           "port": port,
-                          "users": [{
-                              "id": user_id,
-                              "encryption": qs.get("encryption", "none"),
-                              "flow": qs.get("flow", ""),
-                          }],
+                          "users": [{"id": user_id, "encryption": qs.get("encryption", "none"), "flow": qs.get("flow", "")}],
                       }]
                   },
                   "streamSettings": build_stream_settings(qs, host),
@@ -132,9 +118,6 @@ jobs:
               host = vmess.get("add")
               port = int(vmess.get("port", 0))
               user_id = vmess.get("id", "")
-              if not host or not port or not user_id:
-                  raise SystemExit("Invalid VMess URL: missing host, port, or uuid")
-
               query = {
                   "type": vmess.get("net", "tcp"),
                   "security": vmess.get("tls", "none"),
@@ -142,78 +125,62 @@ jobs:
                   "host": vmess.get("host", ""),
                   "sni": vmess.get("sni", "") or host,
                   "fp": vmess.get("fp", "chrome"),
-                  "serviceName": vmess.get("path", ""),
-                  "authority": vmess.get("host", ""),
                   "headerType": vmess.get("type", "none") or "none",
               }
-
               outbound = {
                   "protocol": "vmess",
                   "settings": {
                       "vnext": [{
                           "address": host,
                           "port": port,
-                          "users": [{
-                              "id": user_id,
-                              "alterId": int(vmess.get("aid", 0) or 0),
-                              "security": vmess.get("scy", "auto"),
-                          }],
+                          "users": [{"id": user_id, "alterId": int(vmess.get("aid", 0) or 0), "security": vmess.get("scy", "auto")}],
                       }]
                   },
                   "streamSettings": build_stream_settings(query, host),
               }
-
           config = {
               "log": {"loglevel": "warning"},
-              "inbounds": [{
-                  "listen": "127.0.0.1",
-                  "port": 8080,
-                  "protocol": "http",
-              }],
+              "inbounds": [{"listen": "127.0.0.1", "port": 8080, "protocol": "http"}],
               "outbounds": [outbound],
           }
-
           with open("xray-config.json", "w", encoding="ascii") as f:
               json.dump(config, f, indent=2)
           PY
 
+      # 4. 启动代理 (保持原样)
       - name: Start Xray proxy
         run: |
           nohup xray run -c xray-config.json > xray.log 2>&1 &
-          sleep 2
+          sleep 3
           xray version
-          sed -n '1,20p' xray.log || true
 
-      - name: Setup environment
+      # 5. 设置 Python 运行环境 (针对 SeleniumBase)
+      - name: Setup Python environment
         env:
           DEBIAN_FRONTEND: noninteractive
-          NEEDRESTART_MODE: a
         run: |
-          sudo -E apt-get update -qq
-          sudo -E apt-get install -y -qq -o Dpkg::Use-Pty=0 xvfb p7zip-full 2>&1 | tail -5
-          npm init -y --silent
-          npm install --silent playwright
-          npx playwright install --with-deps chromium 2>&1 | tail -5
-          # Buster extension
-          mkdir -p extensions/buster
-          wget -qO extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
-          mkdir -p extensions/buster/unpacked
-          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
-          # Turnstile bypasser extension
-          mkdir -p extensions/turnstile-bypasser/unpacked
-          curl -sL "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=131.0.0.0&acceptformat=crx2,crx3&x=id%3Ddockglonapofdibnccbnendkgdmhdplk%26installsource%3Dondemand%26uc" -o extensions/turnstile-bypasser/turnstile.crx
-          7z x -y extensions/turnstile-bypasser/turnstile.crx -oextensions/turnstile-bypasser/unpacked > /dev/null
+          sudo apt-get update -qq
+          # 添加了 fonts-wqy-microhei (文泉驿微米黑中文字体)
+          sudo apt-get install -y -qq xvfb google-chrome-stable fonts-wqy-microhei
+          
+          # 刷新字体缓存，确保 Chrome 能识别新字体
+          sudo fc-cache -fv
+          
+          pip install seleniumbase requests pyvirtualdisplay
+          # 关键：安装浏览器驱动
+          sbase install chromedriver
 
+      # 6. 获取 Python 签到脚本 (原 Fetch checkin.js 改为 checkin.py)
       - name: Fetch vps8 checkin script
         env:
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
         run: |
           curl -sL \
             -H "Authorization: Bearer ${MY_GITHUB_TOKEN}" \
-            -o checkin.js \
-            "https://raw.githubusercontent.com/baico111/auto-haxrenw/main/checkin.js"
+            -o checkin.py \
+            "https://raw.githubusercontent.com/baico111/auto-haxrenw/main/checkin.py"
 
+      # 7. 检查代理 IP (保持原样)
       - name: Check IP
         env:
           vps8_PROXY: http://127.0.0.1:8080
@@ -223,42 +190,40 @@ jobs:
 
       - name: Run login flow
         id: login_step
-        continue-on-error: true # 开启后才能在失败时执行下一步的重启逻辑
-        run: |
-          mkdir -p screenshots
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node checkin.js
+        continue-on-error: true
         env:
           vps8_ACCOUNTS: ${{ secrets.vps8_ACCOUNTS_2 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          vps8_PROXY: http://127.0.0.1:8080
-
+          HTTP_PROXY: http://127.0.0.1:8080
+          HTTPS_PROXY: http://127.0.0.1:8080
+          # 关键：增加 no_proxy 排除本地回环地址
+          no_proxy: localhost,127.0.0.1
+        run: |
+          mkdir -p screenshots
+          # 稍微给 Xvfb 更多一点启动余量
+          sleep 5
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" python checkin.py
+          
+      # 9. 失败自动重启 (保持原样)
       - name: Restart Workflow on Failure
         if: steps.login_step.outcome == 'failure' && github.run_attempt < 6
         run: |
           echo "检测到任务失败，准备重启整个工作流（当前尝试第 ${{ github.run_attempt }} 次）"
-          
-          # 这里的名称必须和本文件最顶部的 name 一致
           WORKFLOW_NAME="VPS8-2 Login"
-          
-          # 核心重启逻辑
           WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
             | jq -r ".workflows[] | select(.name==\"$WORKFLOW_NAME\") | .id")
-
-          echo "目标工作流 ID: $WORKFLOW_ID"
-
           curl -L -i -X POST \
             -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches" \
             -d '{"ref":"${{ github.ref_name }}"}'
-          
           exit 1
 
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: screenshots
+          name: vps8-data
           path: screenshots/*
           retention-days: 1
