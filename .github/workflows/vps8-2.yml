@@ -6,9 +6,6 @@ on:
     paths:
       - "checkin.py"
       - "vps8-2.yml"
-  schedule:
-    # 每天北京时间 8:10 (UTC 0:10) 运行一次
-    - cron: '10 0 * * *'
 
 jobs:
   run:
