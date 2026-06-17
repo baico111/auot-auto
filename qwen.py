@@ -9,7 +9,12 @@ STRING_SESSION = os.environ.get("TG_STRING_SESSION")
 
 # 目标机器人列表
 TARGET_BOTS = ["qwenpwa_bot", "qwenpwa2_bot"]
-COMMAND_TEXT = "你好，现在长沙天气怎么样，然后再帮我看看现在BTC是什么价格了。"
+
+# 定义要发送的消息列表
+MESSAGES = [
+    "/stop",
+    "你好，现在长沙天气怎么样,然后再帮我看看现在BTC是什么价格了。"
+]
 # ===============================================
 
 async def main():
@@ -26,8 +31,14 @@ async def main():
     for target_bot in TARGET_BOTS:
         try:
             print(f"[LOG] 正在向 {target_bot} 发送消息...", flush=True)
-            await app.send_message(target_bot, COMMAND_TEXT)
-            print(f"[LOG] 消息已成功发送至 {target_bot}", flush=True)
+            
+            # 依次发送列表中的每条消息
+            for msg in MESSAGES:
+                await app.send_message(target_bot, msg)
+                print(f"[LOG] 消息发送成功: {msg}", flush=True)
+                # 消息之间增加 2 秒延迟，防止频率过高
+                await asyncio.sleep(2)
+                
         except Exception as e:
             print(f"[LOG] 发送至 {target_bot} 失败: {e}", flush=True)
 
