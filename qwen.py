@@ -9,7 +9,7 @@ STRING_SESSION = os.environ.get("TG_STRING_SESSION")
 
 # 目标机器人列表
 TARGET_BOTS = ["qwenpwa_bot", "qwenpwa2_bot"]
-COMMAND_TEXT = "你好，现在长沙天气怎么样？"
+COMMAND_TEXT = "你好，现在长沙天气怎么样，然后再帮我看看现在BTC是什么价格了。"
 # ===============================================
 
 async def main():
