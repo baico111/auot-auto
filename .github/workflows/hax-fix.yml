@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
           libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2t64 \
-          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 jq unzip
+          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 jq unzip file
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -207,31 +207,68 @@ jobs:
           print(f"[+] 选中节点: {node['name']} -> {node['host']}:{node['port']}")
           PYEOF
 
-          # 3. 安装 xray-core
-          XRAY_VER="v25.6.14"
-          XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VER}/Xray-linux-64.zip"
-          echo "[*] 下载 xray-core ${XRAY_VER}..."
-          curl -sSL --max-time 60 -o proxy/xray.zip "${XRAY_URL}"
-          cd proxy && unzip -o xray.zip xray && chmod +x xray && cd ..
+          # 3. 下载 xray-core (用 latest 自动重定向,避免版本号写死)
+          echo "[*] 下载 xray-core (latest)..."
+          curl -sSL --max-time 180 -o proxy/xray.zip \
+            "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
 
-          # 4. 后台启动 xray
+          # 验证下载的文件是不是有效 zip
+          echo "[*] 检查下载文件..."
+          ls -la proxy/xray.zip
+          file proxy/xray.zip || true
+          if ! unzip -l proxy/xray.zip >/dev/null 2>&1; then
+              echo "[-] 下载的文件不是有效 zip,前 200 字节(hex):"
+              head -c 200 proxy/xray.zip | xxd | head -20
+              echo ""
+              echo "[-] 可能是 GitHub 限流或网络问题,重试一次..."
+              sleep 5
+              curl -sSL --max-time 240 -o proxy/xray.zip \
+                "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
+              ls -la proxy/xray.zip
+              file proxy/xray.zip || true
+              if ! unzip -l proxy/xray.zip >/dev/null 2>&1; then
+                  echo "[-] 重试后仍然不是有效 zip,放弃"
+                  exit 1
+              fi
+          fi
+          echo "[+] zip 文件有效"
+
+          # 4. 解压 (用 -d 指定目录,不用 cd,避免路径错乱)
+          echo "[*] 解压 xray..."
+          unzip -o proxy/xray.zip xray -d proxy/
+          chmod +x proxy/xray
+
+          if [ ! -f proxy/xray ]; then
+              echo "[-] 解压后未找到 proxy/xray 二进制"
+              ls -la proxy/
+              exit 1
+          fi
+          echo "[+] xray 二进制就绪: $(ls -la proxy/xray)"
+
+          # 5. 后台启动 xray
           echo "[*] 启动 xray..."
           nohup ./proxy/xray run -config proxy/xray_config.json > proxy/xray.log 2>&1 &
           XRAY_PID=$!
           echo "xray PID: $XRAY_PID"
           sleep 3
 
-          # 5. 测试代理是否可用
-          echo "[*] 测试代理连通性(最多等 20 秒)..."
+          # 检查进程是否还活着
+          if ! kill -0 $XRAY_PID 2>/dev/null; then
+              echo "[-] xray 进程已退出,日志:"
+              cat proxy/xray.log 2>/dev/null || echo "(无日志文件)"
+              exit 1
+          fi
+          echo "[+] xray 进程运行中"
+
+          # 6. 测试代理是否可用
+          echo "[*] 测试代理连通性(最多等 30 秒)..."
           PROXY_OK=0
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -s --max-time 10 -x http://127.0.0.1:10809 https://api.ipify.org > proxy/exit_ip.txt 2>/dev/null; then
-                  EXIT_IP=$(cat proxy/exit_ip.txt)
-                  if [ -n "$EXIT_IP" ] && [ "$EXIT_IP" != "" ]; then
-                      echo "[+] 代理工作正常,出口 IP: $EXIT_IP"
-                      PROXY_OK=1
-                      break
-                  fi
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+              EXIT_IP=$(curl -s --max-time 8 -x http://127.0.0.1:10809 https://api.ipify.org 2>/dev/null)
+              if [ -n "$EXIT_IP" ] && [ "$EXIT_IP" != "" ]; then
+                  echo "[+] 代理工作正常,出口 IP: $EXIT_IP"
+                  PROXY_OK=1
+                  break
               fi
               echo "[*] 第 $i 次尝试失败,等待 2 秒重试..."
               sleep 2
@@ -239,13 +276,13 @@ jobs:
 
           if [ "$PROXY_OK" != "1" ]; then
               echo "[-] 代理连接失败,xray 日志:"
-              cat proxy/xray.log
+              cat proxy/xray.log 2>/dev/null || echo "(无日志文件)"
               echo "[-] 当前节点信息:"
-              cat proxy/selected_node.txt
+              cat proxy/selected_node.txt 2>/dev/null || echo "(无节点文件)"
               exit 1
           fi
 
-          # 6. 把代理地址写入 GITHUB_ENV,让后续步骤能用
+          # 7. 把代理地址写入 GITHUB_ENV,让后续步骤能用
           echo "HAX_PROXY=127.0.0.1:10809" >> $GITHUB_ENV
           echo "[+] HAX_PROXY=127.0.0.1:10809 已写入 GITHUB_ENV"
 
