@@ -21,23 +21,12 @@ jobs:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
           path: .  # 保持代码铺在根目录，确保 PYTHONPATH 逻辑不变
 
-      # === 新增:缓存浏览器 profile,跨次运行保持 cookie/指纹累积 ===
-      # reCAPTCHA v3 会随 profile 历史累积而给更高分
-      # 失败换 IP 重试时,这个 cache 也会被复用,让新 IP 也能吃到老 cookie 红利
-      - name: 💾 Cache browser profile
-        uses: actions/cache@v4
-        with:
-          path: ./browser_profile
-          key: chrome-profile-${{ github.run_id }}
-          restore-keys: |
-            chrome-profile-
-
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
           libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2t64 \
-          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 jq
+          libpango-1.0-0 libcairo2 libgl1 libglib2.0-0 jq unzip
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -48,6 +37,217 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install seleniumbase pyrogram tgcrypto requests loguru
+
+      # ============================================================
+      # 新增：代理设置 (Xray + VLESS 订阅)
+      # 作用:GitHub Actions IP 被 Turnstile 标记,走代理换干净 IP
+      # 需要在仓库 Settings/Secrets 里加 PROXY_SUB_URL 存订阅地址
+      # ============================================================
+      - name: Setup Proxy (Xray + VLESS)
+        env:
+          SUB_URL: ${{ secrets.PROXY_SUB_URL }}
+        run: |
+          set -e
+          if [ -z "$SUB_URL" ]; then
+            echo "[!] 未配置 PROXY_SUB_URL secret,跳过代理设置,使用直连"
+            echo "HAX_PROXY=" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          mkdir -p proxy
+
+          # 1. 下载订阅
+          echo "[*] 下载订阅..."
+          curl -sSL --max-time 30 "$SUB_URL" -o proxy/sub.txt
+          echo "[*] 订阅下载完成,大小: $(wc -c < proxy/sub.txt) bytes"
+
+          # 2. 解析 vless 节点,随机选一个,生成 xray 配置
+          python3 <<'PYEOF'
+          import os, re, json, random, urllib.parse, base64
+
+          with open("proxy/sub.txt", "r", encoding="utf-8") as f:
+              raw = f.read().strip()
+
+          # 尝试 base64 解码(有些订阅整体是 base64)
+          try:
+              decoded = base64.b64decode(raw + "===").decode("utf-8", errors="ignore")
+              if "vless://" in decoded or "vmess://" in decoded or "trojan://" in decoded:
+                  raw = decoded
+          except Exception:
+              pass
+
+          # 提取所有 vless:// 节点
+          nodes = re.findall(r"vless://[^\s]+", raw)
+          if not nodes:
+              print("[-] 订阅中没有找到 vless:// 节点")
+              print(f"[*] 订阅内容前 500 字符: {raw[:500]}")
+              raise SystemExit(1)
+
+          print(f"[*] 共找到 {len(nodes)} 个 vless 节点")
+
+          # 解析每个 vless URL
+          # 格式: vless://uuid@host:port?params#name
+          parsed = []
+          for url in nodes:
+              m = re.match(r"vless://([^@]+)@([^:?#]+):(\d+)(\?[^#]*)?(#.*)?", url)
+              if not m:
+                  continue
+              uuid = m.group(1)
+              host = m.group(2)
+              port = int(m.group(3))
+              qs_str = m.group(4).lstrip("?") if m.group(4) else ""
+              qs = urllib.parse.parse_qs(qs_str)
+              name = urllib.parse.unquote((m.group(5) or "").lstrip("#"))
+              parsed.append({
+                  "uuid": uuid,
+                  "host": host,
+                  "port": port,
+                  "name": name,
+                  "params": {k: v[0] for k, v in qs.items()}
+              })
+
+          if not parsed:
+              print("[-] 没有可解析的节点")
+              raise SystemExit(1)
+
+          # 随机选一个
+          node = random.choice(parsed)
+          print(f"[*] 随机选中: {node['name']} -> {node['host']}:{node['port']}")
+
+          p = node["params"]
+          security = p.get("security", "none")
+          network = p.get("type", "tcp")
+          sni = p.get("sni", "")
+          host_header = p.get("host", "")
+          fp = p.get("fp", "chrome")
+          path = p.get("path", "/")
+          flow = p.get("flow", "")
+          encryption = p.get("encryption", "none")
+
+          # 构建 streamSettings
+          stream = {"network": network}
+          if security == "tls":
+              stream["security"] = "tls"
+              stream["tlsSettings"] = {
+                  "serverName": sni or host_header,
+                  "fingerprint": fp,
+                  "allowInsecure": False
+              }
+          elif security == "reality":
+              stream["security"] = "reality"
+              stream["realitySettings"] = {
+                  "serverName": sni,
+                  "fingerprint": fp,
+                  "publicKey": p.get("pbk", ""),
+                  "shortId": p.get("sid", ""),
+                  "spiderX": p.get("spx", "")
+              }
+          elif security == "none":
+              stream["security"] = "none"
+
+          if network == "ws":
+              ws_settings = {"path": urllib.parse.unquote(path)}
+              if host_header:
+                  ws_settings["headers"] = {"Host": host_header}
+              stream["wsSettings"] = ws_settings
+          elif network == "grpc":
+              stream["grpcSettings"] = {"serviceName": p.get("serviceName", "")}
+          elif network == "tcp" and p.get("headerType") == "http":
+              stream["tcpSettings"] = {
+                  "header": {
+                      "type": "http",
+                      "request": {
+                          "path": [urllib.parse.unquote(path)],
+                          "headers": {"Host": [host_header]} if host_header else {}
+                      }
+                  }
+              }
+
+          xray_config = {
+              "log": {"loglevel": "warning"},
+              "inbounds": [
+                  {
+                      "port": 10808,
+                      "listen": "127.0.0.1",
+                      "protocol": "socks",
+                      "settings": {"udp": True}
+                  },
+                  {
+                      "port": 10809,
+                      "listen": "127.0.0.1",
+                      "protocol": "http"
+                  }
+              ],
+              "outbounds": [
+                  {
+                      "protocol": "vless",
+                      "settings": {
+                          "vnext": [{
+                              "address": node["host"],
+                              "port": node["port"],
+                              "users": [{
+                                  "id": node["uuid"],
+                                  "encryption": encryption,
+                                  "flow": flow
+                              }]
+                          }]
+                      },
+                      "streamSettings": stream
+                  }
+              ]
+          }
+
+          with open("proxy/xray_config.json", "w", encoding="utf-8") as f:
+              json.dump(xray_config, f, indent=2)
+
+          with open("proxy/selected_node.txt", "w", encoding="utf-8") as f:
+              f.write(f"{node['name']} ({node['host']}:{node['port']})\n")
+
+          print(f"[+] xray 配置已写入 proxy/xray_config.json")
+          print(f"[+] 选中节点: {node['name']} -> {node['host']}:{node['port']}")
+          PYEOF
+
+          # 3. 安装 xray-core
+          XRAY_VER="v25.6.14"
+          XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VER}/Xray-linux-64.zip"
+          echo "[*] 下载 xray-core ${XRAY_VER}..."
+          curl -sSL --max-time 60 -o proxy/xray.zip "${XRAY_URL}"
+          cd proxy && unzip -o xray.zip xray && chmod +x xray && cd ..
+
+          # 4. 后台启动 xray
+          echo "[*] 启动 xray..."
+          nohup ./proxy/xray run -config proxy/xray_config.json > proxy/xray.log 2>&1 &
+          XRAY_PID=$!
+          echo "xray PID: $XRAY_PID"
+          sleep 3
+
+          # 5. 测试代理是否可用
+          echo "[*] 测试代理连通性(最多等 20 秒)..."
+          PROXY_OK=0
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -s --max-time 10 -x http://127.0.0.1:10809 https://api.ipify.org > proxy/exit_ip.txt 2>/dev/null; then
+                  EXIT_IP=$(cat proxy/exit_ip.txt)
+                  if [ -n "$EXIT_IP" ] && [ "$EXIT_IP" != "" ]; then
+                      echo "[+] 代理工作正常,出口 IP: $EXIT_IP"
+                      PROXY_OK=1
+                      break
+                  fi
+              fi
+              echo "[*] 第 $i 次尝试失败,等待 2 秒重试..."
+              sleep 2
+          done
+
+          if [ "$PROXY_OK" != "1" ]; then
+              echo "[-] 代理连接失败,xray 日志:"
+              cat proxy/xray.log
+              echo "[-] 当前节点信息:"
+              cat proxy/selected_node.txt
+              exit 1
+          fi
+
+          # 6. 把代理地址写入 GITHUB_ENV,让后续步骤能用
+          echo "HAX_PROXY=127.0.0.1:10809" >> $GITHUB_ENV
+          echo "[+] HAX_PROXY=127.0.0.1:10809 已写入 GITHUB_ENV"
 
       - name: Run Hax Task
         id: hax_run
@@ -70,25 +270,9 @@ jobs:
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
           # 如果脚本需要这个变量，也请加上
           HOSTUUID: ${{ secrets.HOSTUUID }}
-          # === 新增:免费过 reCAPTCHA v3 的关键 secret ===
-          # 你本地 Chrome 浏览器里 google.com 的 cookie(JSON 数组字符串,一行)
-          # 作用:让 v3 识别为"有谷歌历史的真实用户",分数直接拉高
-          # 没配这个的话脚本会跳过注入,v3 分数会偏低
-          GOOGLE_COOKIES_JSON: ${{ secrets.GOOGLE_COOKIES_JSON }}
-          # 持久化 profile 目录,配合上面的 cache 用
-          BROWSER_PROFILE_DIR: ./browser_profile
+          # 代理地址(由 Setup Proxy 步骤注入,格式 host:port,空则不走代理)
+          HAX_PROXY: ${{ env.HAX_PROXY }}
         run: python hax_renw_us.py
-
-      # === 新增:上传调试截图,失败时能看到现场 ===
-      - name: 📸 Upload debug screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: op-screenshots-${{ github.run_attempt }}
-          path: |
-            output/*.png
-            screenshots/*.png
-          if-no-files-found: ignore
 
       - name: Change IP and Restart Workflow
         if: steps.hax_run.outcome == 'failure' && github.run_attempt < 6
