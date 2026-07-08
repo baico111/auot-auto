@@ -261,10 +261,12 @@ jobs:
           echo "[+] xray 进程运行中"
 
           # 6. 测试代理是否可用
+          # 注意:用 -k 跳过 SSL 验证(CF 节点证书 SNI 可能不匹配)
+          #     用 || true 防止 set -e 在 curl 失败时直接退出
           echo "[*] 测试代理连通性(最多等 30 秒)..."
           PROXY_OK=0
           for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-              EXIT_IP=$(curl -s --max-time 8 -x http://127.0.0.1:10809 https://api.ipify.org 2>/dev/null)
+              EXIT_IP=$(curl -sk --max-time 8 -x http://127.0.0.1:10809 https://api.ipify.org 2>/dev/null || echo "")
               if [ -n "$EXIT_IP" ] && [ "$EXIT_IP" != "" ]; then
                   echo "[+] 代理工作正常,出口 IP: $EXIT_IP"
                   PROXY_OK=1
