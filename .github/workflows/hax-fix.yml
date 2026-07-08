@@ -36,7 +36,7 @@ jobs:
       - name: Install Python Requirements
         run: |
           pip install --upgrade pip
-          pip install seleniumbase pyrogram tgcrypto requests loguru
+          pip install seleniumbase pyrogram tgcrypto requests loguru python-socks[asyncio]
 
       # ============================================================
       # 新增：代理设置 (Xray + VLESS 订阅)
