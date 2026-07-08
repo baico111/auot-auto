@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
+      
     steps:
       # --- 关键：使用同一个变量拉取私库代码 ---
       - name: Checkout Repository
@@ -18,19 +18,8 @@ jobs:
         with:
           repository: baico111/auto-haxrenw
           # 必须在公开仓库 Settings 里存入 MY_GITHUB_TOKEN
-          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          token: ${{ secrets.MY_GITHUB_TOKEN }} 
           path: .  # 保持代码铺在根目录，确保 PYTHONPATH 逻辑不变
-
-      # === 新增:缓存浏览器 profile,跨次运行保持 cookie/指纹累积 ===
-      # reCAPTCHA v3 会随 profile 历史累积而给更高分
-      # 失败换 IP 重试时,这个 cache 也会被复用,让新 IP 也能吃到老 cookie 红利
-      - name: 💾 Cache browser profile
-        uses: actions/cache@v4
-        with:
-          path: ./browser_profile
-          key: chrome-profile-${{ github.run_id }}
-          restore-keys: |
-            chrome-profile-
 
       - name: Install System Dependencies
         run: |
@@ -70,34 +59,16 @@ jobs:
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
           # 如果脚本需要这个变量，也请加上
           HOSTUUID: ${{ secrets.HOSTUUID }}
-          # === 新增:免费过 reCAPTCHA v3 的关键 secret ===
-          # 你本地 Chrome 浏览器里 google.com 的 cookie(JSON 数组字符串,一行)
-          # 作用:让 v3 识别为"有谷歌历史的真实用户",分数直接拉高
-          # 没配这个的话脚本会跳过注入,v3 分数会偏低
-          GOOGLE_COOKIES_JSON: ${{ secrets.GOOGLE_COOKIES_JSON }}
-          # 持久化 profile 目录,配合上面的 cache 用
-          BROWSER_PROFILE_DIR: ./browser_profile
         run: python hax_renw_us.py
-
-      # === 新增:上传调试截图,失败时能看到现场 ===
-      - name: 📸 Upload debug screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: op-screenshots-${{ github.run_attempt }}
-          path: |
-            output/*.png
-            screenshots/*.png
-          if-no-files-found: ignore
 
       - name: Change IP and Restart Workflow
         if: steps.hax_run.outcome == 'failure' && github.run_attempt < 6
         run: |
           echo "检测到任务失败，准备换 IP 重试（当前第 ${{ github.run_attempt }} 次）"
-
+          
           # 必须与本文件顶部的 name 保持完全一致
           WORKFLOW_NAME="Hax-US Auto Renew Logic"
-
+          
           # 获取当前公开仓库中的工作流 ID
           WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.MY_GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
@@ -111,5 +82,5 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches" \
             -d '{"ref":"${{ github.ref_name }}"}'
-
+          
           exit 1
